@@ -1,0 +1,209 @@
+---
+title: "Analysis Of U.S. Storm Data 2006-2011"
+author: "tjs"
+date: "Monday, April 20, 2015"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+<h4>SYNOPSIS:</h4>  This project studies the NOAA Storm Database of the United States for the years 2006-2011 and addresses two questions about severe weather events. 
+
+First, what types of events are most harmful to population health in the United States? The two aspects of personal health provided in the database (fatalities and injuries) were examined. For fatalities, the events that caused the largest numbers of fatalities (top 10%) are (in descending order) TORNADO, FLASH FLOOD, EXCESSIVE HEAT, RIP CURRENT, HEAT and LIGHTNING. For injuries, the events that caused the largest numbers of injuries (top 10%) are (in descending order)  TORNADO, EXCESSIVE HEAT, THUNDERSTORM WIND, HEAT, LIGHTNING and WILDFIRE. 
+
+Second, what types of events have the most economic impact in the United States? The two economic factors provided in the database (property damage and crop damage) were examined. For property damage, the top 10% of costs resulted from (in descending order) FLOOD, TORNADO, HAIL, FLASH FLOOD, STORM SURGE/TIDE and THUNDERSTORM WIND.  For crop damage, the top 10% of costs resulted from (in descending order) FLOOD, DROUGHT, HAIL, FROST/FREEZE, FLASH FLOOD and EXCESSIVE HEAT. The largest total cost were the results of (in descending order) FLOOD, TORNADO, HAIL, FLASH FLOOD, STORM SURGE/TIDE and THUNDERSTORM WIND.
+
+<h4>Data Processing</h4>1. The data was downloaded from the NOAA web site using the URL https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2 and read into R using the command read.csv. The file is huge (902,097 rows and 37 columns) and covers the years 1950-2011.   
+```{r readdata,echo=TRUE,results='markup',cache=TRUE}
+## download the Storm Data file
+#download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", "data/StormData.csv.bz2")
+
+## download the documentation of the Storm Data file
+# download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf","data/StormDataDoc.pdf")
+
+## download the FAQ file
+# download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf", "data/StormEvents-FAQ.pdf")
+
+## read the data into R
+data<-read.csv("data/StormData.csv")
+print(dim(data))
+```
+
+2. The study used only 10 Of the 37 variables (columns) in the datafile, so the database was pared to include only those variables. An addditional variable containing the year the event began was added to the database.
+```{r keep10columns,echo=TRUE,results='markup'}
+# Use 1986-1995 (10 years) data
+keep<-c("BGN_DATE","COUNTYNAME", "STATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")
+data_keep<-data[,keep]
+data_keep$BGN_DATE<-as.Date(data_keep$BGN_DATE, "%m/%d/%Y")
+require(lubridate)
+data_keep$year<-year(data_keep$BGN_DATE)
+print(head(data_keep,3))
+```
+
+3. This study used only the 10-year data 2006-2011, so these dates were extracted from the smaller dataset. This 10-year interval was chosen to reduce the size of the dataset and to obtain better indicators for the current year.
+```{r keepyears,echo=TRUE,results='markup'}
+data_years<-data_keep[data_keep$year > 2005,]
+print(head(data_years,3))
+```
+
+4. The first variable studied was the FATALITIES variable. A data.frame was extracted that contained only the event type (EVTYPE) and the total number of resulting fatalities (FATALITIES) caused by the storm. The events resulting in the top 10% of the fatalities was then extracted and sorted in decreasing order.
+```{r fatilities,echo=TRUE,results='markup'}
+require(stats)
+sumDeathByFactor<-aggregate(FATALITIES ~ EVTYPE, sum, data = data_years,simplify=T)
+sumDeathByFactor$EVTYPE<-as.character(sumDeathByFactor$EVTYPE)
+print(quantile(sumDeathByFactor$FATALITIES))
+Q90<-quantile(sumDeathByFactor$FATALITIES,.9)
+Q90death<-sumDeathByFactor[sumDeathByFactor$FATALITIES > Q90,]
+deathSort<-Q90death$FATALITIES
+names(deathSort)<-Q90death$EVTYPE
+deathSort<-sort(deathSort,decreasing=TRUE)
+print(deathSort)
+```
+
+5. The second variable studied was the INJURIES variable. As was done for the previous variable, a data.frame was extracted that contained only the event type (EVTYPE) and the total number of resulting injuries (INJURIES) caused by the storm. The events resulting in the top 10% of the injuries was then extracted and sorted in decreasing order.
+```{r injuries,echo=TRUE,results='markup'}
+require(stats)
+sumHurtByFactor<-aggregate(INJURIES ~ EVTYPE, sum, data = data_years,simplify=T)
+sumHurtByFactor$EVTYPE<-as.character(sumHurtByFactor$EVTYPE)
+quantile(sumHurtByFactor$INJURIES)
+Q90<-quantile(sumHurtByFactor$INJURIES,.9)
+Q90Hurt<-sumHurtByFactor[sumHurtByFactor$INJURIES > Q90,]
+hurtSort<-Q90Hurt$INJURIES
+names(hurtSort)<-Q90Hurt$EVTYPE
+hurtSort<-sort(hurtSort,decreasing=TRUE)
+print(hurtSort)
+```
+
+6. The next variables studied dealt with property damage (PROPDMG and PROPDMGEXP). The interpretation of these variables was not as straight forward as the first two variables. In particular, a decision had to be made on how to use the PROPDMGEXP variable. A search failed to reveal a definitive answer to how to use this variable. The first step in the decision was to examine its values.
+```{r propdmgexp values,echo=TRUE,results='markup'}
+levels(data_years$PROPDMGEXP)
+```
+
+One guess for the purpose of this variable is as a multiplier for the value in the variable PROPDMG. This would make sense for the letters: 'h' or 'H' for 100, 'K' for 1,000 and 'm' or 'M' for million. A blank or '-' would indicate none (multiply by 1). A '?' would indicate unknown. A '+' would indicate a little more than the value in PROPDMG. But what about the  integers? A study of NOAA storm data given by years did not add clarity. For example, a row from the data used reads
+
+```{r compare1,echo=FALSE,results='markup'}
+x<-c("7/25/1995 0:00", "BACON", "GA", "THUNDERSTORM WINDS",	"0", "0", "50.0", "0", "0", "_")	
+names(x)<-c("BGN_DATE", "COUNTYNAME", "STATE", "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+ print(noquote(x))
+ ```
+
+while the data from the <i>1995-07 NOAA Storm Data Select Publications</i> (http://www.ncdc.noaa.gov/IPS/sd/sd.html?_finish=0.20716401179117683) reads:
+```{r compare2,echo=FALSE,results='markup'}
+x1<-c("Bacon County", "25", "1732EST","_","_", "0", "0", "500", "0", "Thunderstorm Winds")
+names(x1)<-c("Location", "Date", "Standard", "(Miles)", "(Yards)", "Killed", "Injured", "Property", "Crops", "Character of Storm")
+print(noquote(x1))
+```
+
+Very confusing, how does a $500 cost become a 50.0 0 pair!  The choice most likely seemed to be to replace <i>n</i> by 10^<i>n</i>, inspite of the fact that the replacement does not work in this case. 
+```{r replacePROPEXP,echo=TRUE,results='markup'}
+replaceValues<-c("h"="100","H"="100","k"="1000","K"="1000","m"="1000000","M"="1000000","B"="1000000000","+"="1","-"="1","?"="1")
+replaceValues<-c(replaceValues,"0"="1","1"="10","2"="100","3"="1000","4"="10000","5"="100000","6"="1000000","7"="10000000","8"="100000000")
+print(noquote(replaceValues))
+require(plyr)
+data_years$PROPDMGEXP<-as.character(revalue(data_years$PROPDMGEXP, replaceValues))
+data_years$PROPDMGEXP[data_years$PROPDMGEXP == ""]<-"1"
+data_years$PROPDMGEXP<-as.numeric(data_years$PROPDMGEXP)
+data_years$PROPDMGEXP[is.na(data_years$PROPDMGEXP)]<-1
+summary(data_years$PROPDMGEXP)
+```
+
+Once the replacements were made, the two variables were combined into a new variable by multiplying the PROPDMG with the replaced values now in PROPDMGEXP.
+```{r multiplyProp,echo=TRUE,results='markup'}
+data_years$PropTot<-data_years$PROPDMG * data_years$PROPDMGEXP
+summary(data_years$PropTot)
+```
+
+Now the top 10% of the property damage costs could be found and sorted.
+```{r sortProp,echo=TRUE,results='markup'}
+require(stats)
+sumPropTotByFactor<-aggregate(PropTot ~ EVTYPE, sum, data = data_years,simplify=T)
+sumPropTotByFactor$EVTYPE<-as.character(sumPropTotByFactor$EVTYPE)
+quantile(sumPropTotByFactor$PropTot)
+Q90<-quantile(sumPropTotByFactor$PropTot,.9)
+Q90PropType<-sumPropTotByFactor[sumPropTotByFactor$PropTot > Q90,]
+propSort<-Q90PropType$PropTot
+names(propSort)<-Q90PropType$EVTYPE
+propSort<-sort(propSort,decreasing=TRUE)
+print(propSort)
+```
+
+7. The last variables studied dealt with crop damage (CROPDMG and CROPDMGEXP). The interpretation of these variables was done the same as that of the two previous variables (PROPDMG and PROPDMGEXP)
+```{r replaceCropExp,echo=TRUE,results='markup'}
+require(plyr)
+data_years$CROPDMGEXP<-as.character(revalue(data_years$CROPDMGEXP, replaceValues))
+data_years$CROPDMGEXP[data_years$CROPDMGEXP == ""]<-"1"
+data_years$CROPDMGEXP<-as.numeric(data_years$CROPDMGEXP)
+data_years$CROPDMGEXP[is.na(data_years$CROPDMGEXP)]<-1
+data_years$CropTot<-data_years$CROPDMG * data_years$CROPDMGEXP
+summary(data_years$CropTot)
+```
+
+Then the top 10% of the crop damage costs was found and sorted.
+```{r sortCrop,echo=TRUE,results='markup'}
+require(stats)
+sumCropTotByFactor<-aggregate(CropTot ~ EVTYPE, sum, data = data_years,simplify=T)
+sumCropTotByFactor$EVTYPE<-as.character(sumCropTotByFactor$EVTYPE)
+quantile(sumCropTotByFactor$CropTot)
+Q90<-quantile(sumCropTotByFactor$CropTot,.9)
+Q90CropType<-sumCropTotByFactor[sumCropTotByFactor$CropTot > Q90,]
+cropSort<-Q90CropType$CropTot
+names(cropSort)<-Q90CropType$EVTYPE
+cropSort<-sort(cropSort,decreasing = TRUE)
+print(cropSort)
+```
+
+8. The final step in the analysis was to obtain the total cost by adding the property damage costs and the crop damage costs. This was stored and analyzed as a new variable (totalCost).
+```{r totalCost,echo=TRUE,results='markup'}
+totalCost<-sumCropTotByFactor$CropTot + sumPropTotByFactor$PropTot
+names(totalCost)<-sumPropTotByFactor$EVTYPE
+totDamage<-sort(totalCost,decreasing=TRUE)
+head(totDamage,6)
+```
+
+<h4>Results</h4>
+1. The types of events are most harmful to population health in the U.S. in the time period 2006-2011 are as follows.
+
+The storms that caused the most fatalities are (in decreasing order):  TORNADO (930), FLASH FLOOD (352), EXCESSIVE HEAT (324), RIP CURRENT (233), HEAT (229) and LIGHTNING (204).
+
+The storms that caused the most injuries are (in decreasing order):  TORNADO (10,600), EXCESSIVE HEAT (1,873), THUNDERSTORM WIND (1,400), HEAT, (1,222), LIGHTNING, (1,168) and WILDFIRE (517)
+
+```{r graphHarm,echo=TRUE,results='markup',cache=FALSE}
+par(mfrow = c(1, 2), mar = c(5, 4, 2, 1), xaxt="n")
+# # plot fatalities
+lablist<-as.vector(Q90death$EVTYPE)
+plot(Q90death$FATALITIES,type="h",lwd=5,xlab="",ylab="FATALITIES",main="STORM FATALITIES")
+axis(1,at=1:6,labels=F)
+text(1:6,labels=lablist,srt=45,pos=1,xpd=T)
+# # plot injuries
+lablist<-as.vector(Q90Hurt$EVTYPE)
+plot(Q90Hurt$INJURIES,type="h",lwd=5,xlab="",ylab="INJURIES",main="STORM INJURIES")
+axis(1,at=1:6,labels=F)
+text(1:6,labels=lablist,srt=45,pos=1,xpd=T)
+```
+
+2. The types of events are had the most economic effect in the U.S. in the time period 2006-2011 are as follows.
+
+The storms that caused the most property damage are (in decreasing order):  FLOOD ($130,485,411,240), TORNADO ($15,381,596,740), HAIL ($7,399,567,600), FLASH FLOOD ($7,177,267,260), STORM SURGE/TIDE ($4,641,188,000) and THUNDERSTORM WIND (3,382,654,440).
+
+The storms that caused the most crop damage are (in decreasing order):  FLOOD (2,981,275,000), DROUGHT (2,801,241,000), HAIL (1,001,730,000), FROST/FREEZE (943,741,000), FLASH FLOOD (736,955,000) and EXCESSIVE HEAT (492400000).
+
+The storms that caused the most total damage, both property and crops, are (in decreasing order):  FLOOD (133,466,686,240)        , TORNADO (15,491,243,740), HAIL (8,401,297,600), FLASH FLOOD (7,914,222,260), STORM SURGE/TIDE (4,642,038,000) and THUNDERSTORM WIND (3,780,985,440).
+```{r graphCost,echo=TRUE,results='markup',cache=FALSE}
+par(mfrow = c(2, 2), mar = c(5, 4, 2, 1), xaxt="n")
+head(Q90PropType)
+# property damage
+lablist<-as.vector(Q90PropType$EVTYPE)
+plot(Q90PropType$PropTot,type="h",lwd=5,xlab="",ylab="PROPERTY DAMAGE", main="Property Damage")
+axis(1,at=1:6,labels=FALSE)
+text(1:6,labels=lablist,srt=45,pos=1,xpd=T)
+# crop damage
+lablist<-as.vector(Q90CropType$EVTYPE)
+plot(Q90CropType$CropTot,type="h",lwd=5,xlab="",ylab="CROP DAMAGE",main="Crop Damage")
+axis(1,at=1:6,labels=F)
+text(1:6,labels=lablist,srt=45,pos=1,xpd=T)
+# total
+#par(1,1)
+plot(totDamage[1:6],type='h',lwd=5,main="TOTAL COST", ylab="TOTAL COST")
+lablist<-as.vector(names(totDamage[1:6]))
+axis(1,at=1:6,labels=F)
+text(1:6,labels=lablist,srt=45,pos=1,xpd=T)
+```

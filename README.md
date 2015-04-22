@@ -55,7 +55,7 @@ For this assignment you will need some specific tools
 
 * Synopsis: Immediately after the title, there should be a <b>synopsis</b> which describes and summarizes your analysis in at <b>most 10 complete sentences</b>.
 
-There should be a section titled <b>Data Processing<b>/ which describes (in words and code) how the data were loaded into R and processed for analysis. In particular, your analysis must start from the raw CSV file containing the data. You cannot do any preprocessing outside the document. If preprocessing is time-consuming you may consider using the cache = TRUE option for certain code chunks.
+There should be a section titled <b>Data Processing</b> which describes (in words and code) how the data were loaded into R and processed for analysis. In particular, your analysis must start from the raw CSV file containing the data. You cannot do any preprocessing outside the document. If preprocessing is time-consuming you may consider using the cache = TRUE option for certain code chunks.
 
 There should be a section titled <b>Results</b> in which your results are presented.
 
